@@ -1,0 +1,13 @@
+# OpenAI — leave api_key out of the file; set ASKIT_API_KEY instead.
+
+endpoint: https://api.openai.com/v1
+model: gpt-4o
+
+defaults:
+  temperature: 0.3
+  max_tokens: 4096
+  stream: true
+  output: plain
+  timeout: 60s
+  stream_idle_timeout: 2m
+  retries: 2
