@@ -11,13 +11,13 @@ import (
 
 // Request is the input to [Client.Complete] / [Client.Stream].
 type Request struct {
-	Model       string
-	Prompt      *prompt.Prompt
-	Temperature float64
-	TopP        float64
-	MaxTokens   int
-	Seed        *int
-	Stream      bool
+	Model       string         `json:"model"`
+	Prompt      *prompt.Prompt `json:"prompt,omitempty"`
+	Temperature float64        `json:"temperature,omitempty"`
+	TopP        float64        `json:"top_p,omitempty"`
+	MaxTokens   int            `json:"max_tokens,omitempty"`
+	Seed        *int           `json:"seed,omitempty"`
+	Stream      bool           `json:"stream,omitempty"`
 }
 
 // Response is the buffered-completion result.

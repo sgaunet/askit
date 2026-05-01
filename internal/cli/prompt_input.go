@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -27,31 +26,49 @@ func ReadPrompt(args []string, stdin io.Reader, stdinIsTTY bool) (string, error)
 	isDash := positional == "-"
 	hasStdin := !stdinIsTTY
 
-	switch {
-	case positional == "" && !hasStdin:
-		return "", NewUsageErr("no prompt provided (pass a positional argument, pipe stdin, or use '-')")
-	case positional == "" && hasStdin:
-		return readAll(stdin)
-	case isDash && hasStdin:
-		if len(args) > 1 {
-			return "", NewUsageErr("cannot combine '-' with additional positional arguments")
-		}
-		return readAll(stdin)
-	case isDash && !hasStdin:
-		return "", NewUsageErr("stdin marker '-' used but stdin is a terminal")
-	case !isDash && !hasStdin:
-		return positional, nil
-	default:
-		// Positional non-dash + piped stdin → prepend stdin.
-		piped, err := readAll(stdin)
-		if err != nil {
-			return "", err
-		}
-		if piped == "" {
-			return positional, nil
-		}
-		return strings.TrimRight(piped, "\n") + "\n\n" + positional, nil
+	if positional == "" {
+		return readFromStdinOnly(stdin, hasStdin)
 	}
+	if isDash {
+		return readDashMarker(args, stdin, hasStdin)
+	}
+	return readPositionalWithOptionalStdin(positional, stdin, hasStdin)
+}
+
+// readFromStdinOnly handles the case where no positional argument was given.
+func readFromStdinOnly(stdin io.Reader, hasStdin bool) (string, error) {
+	if !hasStdin {
+		return "", NewUsageErr("no prompt provided (pass a positional argument, pipe stdin, or use '-')")
+	}
+	return readAll(stdin)
+}
+
+// readDashMarker handles the explicit stdin marker `-`.
+func readDashMarker(args []string, stdin io.Reader, hasStdin bool) (string, error) {
+	if !hasStdin {
+		return "", NewUsageErr("stdin marker '-' used but stdin is a terminal")
+	}
+	if len(args) > 1 {
+		return "", NewUsageErr("cannot combine '-' with additional positional arguments")
+	}
+	return readAll(stdin)
+}
+
+// readPositionalWithOptionalStdin handles a non-dash positional argument,
+// optionally prepending piped stdin.
+func readPositionalWithOptionalStdin(positional string, stdin io.Reader, hasStdin bool) (string, error) {
+	if !hasStdin {
+		return positional, nil
+	}
+	// Positional non-dash + piped stdin → prepend stdin.
+	piped, err := readAll(stdin)
+	if err != nil {
+		return "", err
+	}
+	if piped == "" {
+		return positional, nil
+	}
+	return strings.TrimRight(piped, "\n") + "\n\n" + positional, nil
 }
 
 func readAll(r io.Reader) (string, error) {
@@ -74,6 +91,3 @@ func StdinIsTTY() bool {
 	}
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
-
-// Ensure fmt stays imported when this file is edited.
-var _ = fmt.Sprint

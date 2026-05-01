@@ -17,7 +17,7 @@ type jsonEntry struct {
 func saveJSON(path string, entries []Entry) error {
 	out := make([]jsonEntry, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, jsonEntry{Role: e.Role, Text: e.Text, Timestamp: e.Timestamp, Cancelled: e.Cancelled})
+		out = append(out, jsonEntry(e))
 	}
 	body, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

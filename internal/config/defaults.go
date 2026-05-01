@@ -2,6 +2,19 @@ package config
 
 import "time"
 
+// Default values for built-in configuration — named to satisfy the mnd linter.
+const (
+	defaultTemperature        = 0.2
+	defaultMaxTokens          = 4096
+	defaultTimeoutSeconds     = 60
+	defaultStreamIdleMinutes  = 2
+	defaultRetries            = 2
+	defaultMaxImageSizeMB     = 20
+	defaultMaxTextSizeKB      = 500
+	defaultMaxLongEdgePx      = 2048
+	defaultJPEGQuality        = 85
+)
+
 // Builtins returns the baseline configuration used when no value comes from a
 // file, env var, or flag. Exactly matches the "Builtins" table in
 // contracts/config-schema.md.
@@ -11,14 +24,14 @@ import "time"
 func Builtins() *Config {
 	return &Config{
 		Defaults: Defaults{
-			Temperature:       0.2,
+			Temperature:       defaultTemperature,
 			TopP:              1.0,
-			MaxTokens:         4096,
+			MaxTokens:         defaultMaxTokens,
 			Stream:            true,
 			Output:            OutputPlain,
-			Timeout:           Duration(60 * time.Second),
-			StreamIdleTimeout: Duration(2 * time.Minute),
-			Retries:           2,
+			Timeout:           Duration(defaultTimeoutSeconds * time.Second),
+			StreamIdleTimeout: Duration(defaultStreamIdleMinutes * time.Minute),
+			Retries:           defaultRetries,
 		},
 		FileReferences: FileRefsPolicy{
 			ImageExtensions: []string{"png", "jpg", "jpeg", "webp", "gif", "bmp"},
@@ -26,13 +39,13 @@ func Builtins() *Config {
 				"txt", "md", "json", "yaml", "yml", "toml", "csv", "tsv", "log",
 				"go", "py", "rs", "sh", "js", "ts", "html", "xml", "sql", "ini", "conf",
 			},
-			MaxImageSizeMB:  20,
-			MaxTextSizeKB:   500,
+			MaxImageSizeMB:  defaultMaxImageSizeMB,
+			MaxTextSizeKB:   defaultMaxTextSizeKB,
 			UnknownStrategy: UnknownError,
 			ResizeImages: ResizePolicy{
 				Enabled:       false,
-				MaxLongEdgePx: 2048,
-				JPEGQuality:   85,
+				MaxLongEdgePx: defaultMaxLongEdgePx,
+				JPEGQuality:   defaultJPEGQuality,
 			},
 		},
 		Presets: map[string]Preset{},

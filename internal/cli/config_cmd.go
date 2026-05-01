@@ -57,10 +57,16 @@ func runConfig(g *Globals, showPath, showExplain bool, out io.Writer) error {
 	}
 }
 
+const (
+	yamlIndent    = 2 // standard YAML indentation for enc.SetIndent
+	tabwriterPad  = 2 // minimum cell padding in the explain table
+)
+
 func emitYAML(out io.Writer, cfg *config.Config) error {
 	enc := yaml.NewEncoder(out)
-	enc.SetIndent(2)
+	enc.SetIndent(yamlIndent)
 	defer func() { _ = enc.Close() }()
+	//nolint:gosec // G117: APIKey is intentionally shown in config output so the user can verify it is set correctly.
 	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("encode yaml: %w", err)
 	}
@@ -72,7 +78,7 @@ func emitExplain(out io.Writer, cfg *config.Config, prov config.Provenance) erro
 	if err != nil {
 		return fmt.Errorf("explain: %w", err)
 	}
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	tw := tabwriter.NewWriter(out, 0, 0, tabwriterPad, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "FIELD\tVALUE\tSOURCE")
 	for _, l := range lines {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", l.Field, l.Value, l.Source)

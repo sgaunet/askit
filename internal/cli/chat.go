@@ -31,7 +31,7 @@ func newChatCommand(g *Globals) *cobra.Command {
 			"file picker described in spec §8.2 is deferred to v0.2; @path " +
 			"references typed in the input are resolved at submit time.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runChat(g, f)
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -107,127 +108,49 @@ func runQuery(ctx context.Context, g *Globals, f *queryFlags, args []string, std
 		return err
 	}
 
-	// Prompt resolution.
-	userPrompt, err := ReadPrompt(args, os.Stdin, StdinIsTTY())
+	userPrompt, refs, assembled, logger, err := preparePrompt(g, f, args, cfg, resolved)
 	if err != nil {
 		return err
 	}
 
-	// Prompt assembly with @path expansion.
-	logger := NewLogger(g.Verbose)
-	assembled, refs, err := prompt.Assemble(userPrompt, prompt.AssembleOptions{
-		Policy:       cfg.FileReferences,
-		SystemPrompt: resolved.System,
-		ExtraFiles:   f.files,
-		Logger:       logger,
-	})
-	if err != nil {
-		return categorizeAssembleError(err)
-	}
-
-	// Build client request.
-	clientReq := &client.Request{
-		Model:       resolved.Model,
-		Prompt:      assembled,
-		Temperature: resolved.Temperature,
-		TopP:        resolved.TopP,
-		MaxTokens:   resolved.MaxTokens,
-		Seed:        resolved.Seed,
-		Stream:      resolved.Stream,
-	}
-
-	connect := cfg.Defaults.Timeout.AsDuration()
-	if f.timeout > 0 {
-		connect = f.timeout
-	}
-	idle := cfg.Defaults.StreamIdleTimeout.AsDuration()
-	if f.idleTimeout > 0 {
-		idle = f.idleTimeout
-	}
-	retries := cfg.Defaults.Retries
-	if f.retriesSet && f.retries >= 0 {
-		retries = f.retries
-	}
-
-	hc := client.New(cfg.Endpoint, cfg.APIKey, connect, idle)
+	clientReq, hc, retries := buildClientRequest(cfg, f, resolved, assembled)
 
 	// Dry-run: print the redacted request and return.
 	if f.dryRun {
 		return emitDryRun(stderr, hc, clientReq, cfg.Endpoint, cfg.APIKey)
 	}
 
-	// Output destination.
-	var sink io.Writer = stdout
-	var atomic *AtomicWriter
-	if f.out != "" {
-		atomic, err = OpenOutput(f.out, f.force)
-		if err != nil {
-			return err
-		}
-		sink = atomic
+	sink, atomic, err := openSink(f, stdout)
+	if err != nil {
+		return err
+	}
+	if atomic != nil {
 		defer func() { _ = atomic.Close() }()
 	}
 
-	// Output format.
-	outputFormat := resolved.Output
-	if f.outputSet {
-		outputFormat = config.OutputFormat(f.output)
+	r, err := selectRenderer(f, resolved, clientReq, sink)
+	if err != nil {
+		return err
 	}
-
-	// Select renderer per output format. Streaming is only honored for
-	// plain; json/raw always buffer (FR-042). Force non-streaming when
-	// the user picked a buffered format.
-	var r render.Renderer
-	switch outputFormat {
-	case config.OutputPlain:
-		r = &render.PlainRenderer{Out: sink}
-	case config.OutputJSON:
-		r = &render.JSONRenderer{Out: sink}
-		clientReq.Stream = false
-	case config.OutputRaw:
-		r = &render.RawRenderer{Out: sink}
-		clientReq.Stream = false
-	default:
-		return NewUsageErr("unknown output format %q", outputFormat)
-	}
-	// Track refs for the JSON envelope. We re-assemble just the refs list,
-	// which the prompt package already returned alongside the message.
-	// (See the `prompt.Assemble` call below — we need to capture its
-	// second return value.)
-
-	// Execute with retry engine.
-	retryOpts := client.DefaultRetryOptions()
-	retryOpts.MaxAttempts = retries + 1
-	retryOpts.Logger = logger
 
 	started := time.Now()
-	var finalResp *client.Response
-
-	if clientReq.Stream {
-		_, err = client.DoWithRetry(ctx, retryOpts, func(ctx context.Context) (struct{}, error) {
-			chunks, errs := hc.Stream(ctx, clientReq)
-			// Stream directly to the sink as chunks arrive.
-			resp, serr := drainAndRender(chunks, errs, r)
-			if serr != nil {
-				return struct{}{}, serr
-			}
-			finalResp = resp
-			return struct{}{}, nil
-		})
-	} else {
-		finalResp, err = client.DoWithRetry(ctx, retryOpts, func(ctx context.Context) (*client.Response, error) {
-			return hc.Complete(ctx, clientReq)
-		})
-		if err == nil {
-			if werr := r.Stream(finalResp.Text); werr != nil {
-				return werr
-			}
-		}
-	}
+	finalResp, err := executeRequest(ctx, clientReq, hc, r, retries, logger)
 	if err != nil {
-		return categorizeTransportError(err)
+		return err
 	}
+	return finalizeAndCommit(r, atomic, finalResp, resolved, cfg, userPrompt, refs, started)
+}
 
+func finalizeAndCommit(
+	r render.Renderer,
+	atomic *AtomicWriter,
+	finalResp *client.Response,
+	resolved ResolvedPreset,
+	cfg *config.Config,
+	userPrompt string,
+	refs []prompt.FileRef,
+	started time.Time,
+) error {
 	if err := r.Finalize(render.Meta{
 		AskitVersion: version.Version,
 		Model:        resolved.Model,
@@ -246,13 +169,171 @@ func runQuery(ctx context.Context, g *Globals, f *queryFlags, args []string, std
 	}); err != nil {
 		return fmt.Errorf("render finalize: %w", err)
 	}
-
 	if atomic != nil {
 		if err := atomic.Commit(); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// preparePrompt reads the user prompt, assembles file references, and returns
+// the assembled prompt alongside the resolved refs and logger.
+func preparePrompt(
+	g *Globals,
+	f *queryFlags,
+	args []string,
+	cfg *config.Config,
+	resolved ResolvedPreset,
+) (string, []prompt.FileRef, *prompt.Prompt, *slog.Logger, error) {
+	userPrompt, err := ReadPrompt(args, os.Stdin, StdinIsTTY())
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	logger := NewLogger(g.Verbose)
+	assembled, refs, err := prompt.Assemble(userPrompt, prompt.AssembleOptions{
+		Policy:       cfg.FileReferences,
+		SystemPrompt: resolved.System,
+		ExtraFiles:   f.files,
+		Logger:       logger,
+	})
+	if err != nil {
+		return "", nil, nil, nil, categorizeAssembleError(err)
+	}
+	return userPrompt, refs, assembled, logger, nil
+}
+
+// buildClientRequest assembles the client.Request from resolved preset + flags.
+func buildClientRequest(
+	cfg *config.Config,
+	f *queryFlags,
+	resolved ResolvedPreset,
+	assembled *prompt.Prompt,
+) (*client.Request, *client.Client, int) {
+	clientReq := &client.Request{
+		Model:       resolved.Model,
+		Prompt:      assembled,
+		Temperature: resolved.Temperature,
+		TopP:        resolved.TopP,
+		MaxTokens:   resolved.MaxTokens,
+		Seed:        resolved.Seed,
+		Stream:      resolved.Stream,
+	}
+	connect := cfg.Defaults.Timeout.AsDuration()
+	if f.timeout > 0 {
+		connect = f.timeout
+	}
+	idle := cfg.Defaults.StreamIdleTimeout.AsDuration()
+	if f.idleTimeout > 0 {
+		idle = f.idleTimeout
+	}
+	retries := cfg.Defaults.Retries
+	if f.retriesSet && f.retries >= 0 {
+		retries = f.retries
+	}
+	return clientReq, client.New(cfg.Endpoint, cfg.APIKey, connect, idle), retries
+}
+
+// openSink opens the output sink (file or stdout). When a file is requested it
+// returns an AtomicWriter; the caller is responsible for Commit/Close.
+func openSink(f *queryFlags, stdout io.Writer) (io.Writer, *AtomicWriter, error) {
+	if f.out == "" {
+		return stdout, nil, nil
+	}
+	atomic, err := OpenOutput(f.out, f.force)
+	if err != nil {
+		return nil, nil, err
+	}
+	return atomic, atomic, nil
+}
+
+// selectRenderer chooses and configures the renderer based on the output
+// format flag / preset. Also disables streaming for buffered formats.
+//
+//nolint:ireturn // render.Renderer is a required interface return; callers need Stream and Finalize.
+func selectRenderer(
+	f *queryFlags,
+	resolved ResolvedPreset,
+	clientReq *client.Request,
+	sink io.Writer,
+) (render.Renderer, error) {
+	outputFormat := resolved.Output
+	if f.outputSet {
+		outputFormat = config.OutputFormat(f.output)
+	}
+	switch outputFormat {
+	case config.OutputPlain:
+		return &render.PlainRenderer{Out: sink}, nil
+	case config.OutputJSON:
+		clientReq.Stream = false
+		return &render.JSONRenderer{Out: sink}, nil
+	case config.OutputRaw:
+		clientReq.Stream = false
+		return &render.RawRenderer{Out: sink}, nil
+	default:
+		return nil, NewUsageErr("unknown output format %q", outputFormat)
+	}
+}
+
+// executeRequest runs the retry loop and drains the response into r.
+func executeRequest(
+	ctx context.Context,
+	clientReq *client.Request,
+	hc *client.Client,
+	r render.Renderer,
+	retries int,
+	logger *slog.Logger,
+) (*client.Response, error) {
+	retryOpts := client.DefaultRetryOptions()
+	retryOpts.MaxAttempts = retries + 1
+	retryOpts.Logger = logger
+
+	if clientReq.Stream {
+		return executeStreaming(ctx, retryOpts, hc, clientReq, r)
+	}
+	return executeBuffered(ctx, retryOpts, hc, clientReq, r)
+}
+
+func executeStreaming(
+	ctx context.Context,
+	opts client.RetryOptions,
+	hc *client.Client,
+	clientReq *client.Request,
+	r render.Renderer,
+) (*client.Response, error) {
+	var finalResp *client.Response
+	_, err := client.DoWithRetry(ctx, opts, func(ctx context.Context) (struct{}, error) {
+		chunks, errs := hc.Stream(ctx, clientReq)
+		resp, serr := drainAndRender(chunks, errs, r)
+		if serr != nil {
+			return struct{}{}, serr
+		}
+		finalResp = resp
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return nil, categorizeTransportError(err)
+	}
+	return finalResp, nil
+}
+
+func executeBuffered(
+	ctx context.Context,
+	opts client.RetryOptions,
+	hc *client.Client,
+	clientReq *client.Request,
+	r render.Renderer,
+) (*client.Response, error) {
+	finalResp, err := client.DoWithRetry(ctx, opts, func(ctx context.Context) (*client.Response, error) {
+		return hc.Complete(ctx, clientReq)
+	})
+	if err != nil {
+		return nil, categorizeTransportError(err)
+	}
+	if werr := r.Stream(finalResp.Text); werr != nil {
+		return nil, fmt.Errorf("render stream: %w", werr)
+	}
+	return finalResp, nil
 }
 
 func drainAndRender(chunks <-chan client.StreamChunk, errs <-chan error, r render.Renderer) (*client.Response, error) {
@@ -262,7 +343,7 @@ func drainAndRender(chunks <-chan client.StreamChunk, errs <-chan error, r rende
 	for chunk := range chunks {
 		if chunk.Delta != "" {
 			if werr := r.Stream(chunk.Delta); werr != nil {
-				return nil, werr
+				return nil, fmt.Errorf("render stream: %w", werr)
 			}
 			sb = append(sb, chunk.Delta...)
 		}
@@ -368,7 +449,7 @@ func categorizeTransportError(err error) error {
 	}
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
-		return &Categorized{Cat: CatAPI, Code: ExitAPI, Err: apiErr}
+		return &CategorizedError{Cat: CatAPI, Code: ExitAPI, Err: apiErr}
 	}
 	var timeoutErr *client.TimeoutError
 	if errors.As(err, &timeoutErr) {
@@ -391,12 +472,14 @@ func emitDryRun(w io.Writer, _ *client.Client, r *client.Request, endpoint, apiK
 	if apiKey != "" {
 		headers["Authorization"] = "***" // always redacted per FR-092
 	}
-	body, err := json.MarshalIndent(struct {
-		Method   string            `json:"method"`
-		URL      string            `json:"url"`
-		Headers  map[string]string `json:"headers"`
-		Request  *client.Request   `json:"request"`
-	}{
+	type dryRunPayload struct {
+		Method  string            `json:"method"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+		Request *client.Request   `json:"request"`
+	}
+	//nolint:musttag // dryRunPayload has json tags on all fields; Request.Prompt is internal transport only.
+	body, err := json.MarshalIndent(dryRunPayload{
 		Method:  "POST",
 		URL:     endpoint + "/chat/completions",
 		Headers: headers,

@@ -67,33 +67,22 @@ func (g *Globals) FlagOverrides() config.Overrides {
 // mergeEnvFallbacks fills any empty flag-supplied slot from the matching env var.
 // Called before [EnvOverrides] / [FlagOverrides] are consulted.
 func (g *Globals) mergeEnvFallbacks() {
-	if g.ConfigPath == "" {
-		if v := os.Getenv("ASKIT_CONFIG"); v != "" {
-			g.ConfigPath = v
-			g.configPathFromFlag = false
-		}
+	mergeEnvString(&g.ConfigPath, "ASKIT_CONFIG", &g.configPathFromFlag)
+	mergeEnvString(&g.Endpoint, "ASKIT_ENDPOINT", &g.endpointFromFlag)
+	mergeEnvString(&g.Model, "ASKIT_MODEL", &g.modelFromFlag)
+	mergeEnvString(&g.APIKey, "ASKIT_API_KEY", &g.apiKeyFromFlag)
+	if !g.NoColor && strings.TrimSpace(os.Getenv("NO_COLOR")) != "" {
+		g.NoColor = true
 	}
-	if g.Endpoint == "" {
-		if v := os.Getenv("ASKIT_ENDPOINT"); v != "" {
-			g.Endpoint = v
-			g.endpointFromFlag = false
-		}
-	}
-	if g.Model == "" {
-		if v := os.Getenv("ASKIT_MODEL"); v != "" {
-			g.Model = v
-			g.modelFromFlag = false
-		}
-	}
-	if g.APIKey == "" {
-		if v := os.Getenv("ASKIT_API_KEY"); v != "" {
-			g.APIKey = v
-			g.apiKeyFromFlag = false
-		}
-	}
-	if !g.NoColor {
-		if v := strings.TrimSpace(os.Getenv("NO_COLOR")); v != "" {
-			g.NoColor = true
+}
+
+// mergeEnvString copies the named env var into *dest when dest is empty,
+// and clears the fromFlag marker to record that the value came from the env.
+func mergeEnvString(dest *string, key string, fromFlag *bool) {
+	if *dest == "" {
+		if v := os.Getenv(key); v != "" {
+			*dest = v
+			*fromFlag = false
 		}
 	}
 }

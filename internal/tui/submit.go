@@ -57,7 +57,7 @@ func (m *Model) submit(text string) tea.Cmd {
 	m.cancel = cancel
 
 	m.redraw()
-	return kickStream(m.Req, ctx, req)
+	return kickStream(ctx, m.Req, req)
 }
 
 // Stream plumbing: bubbletea commands return a single tea.Msg and then
@@ -77,7 +77,7 @@ type streamChunkPlusMsg struct {
 	state streamState
 }
 
-func kickStream(req Requester, ctx context.Context, clientReq *client.Request) tea.Cmd {
+func kickStream(ctx context.Context, req Requester, clientReq *client.Request) tea.Cmd {
 	return func() tea.Msg {
 		chunks, errs := req.Stream(ctx, clientReq)
 		return streamReadyMsg{chunks: chunks, errs: errs}

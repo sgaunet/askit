@@ -33,11 +33,15 @@ type Client struct {
 // cancelling the body-read phase. Body-read idle is enforced by the
 // streaming logic in stream.go (stream-idle timeout).
 func New(endpoint, apiKey string, connectTimeout, streamIdle time.Duration) *Client {
+	const (
+		maxIdleConns    = 10
+		idleConnTimeout = 90 * time.Second
+	)
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          10,
-		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          maxIdleConns,
+		IdleConnTimeout:       idleConnTimeout,
 		ResponseHeaderTimeout: connectTimeout,
 		TLSHandshakeTimeout:   connectTimeout,
 		ExpectContinueTimeout: 1 * time.Second,
@@ -49,32 +53,6 @@ func New(endpoint, apiKey string, connectTimeout, streamIdle time.Duration) *Cli
 		ConnectTimeout:    connectTimeout,
 		StreamIdleTimeout: streamIdle,
 	}
-}
-
-// newRequest builds the HTTP request for a chat completion. Returned request
-// already has the Authorization header set (if the API key is non-empty).
-func (c *Client) newRequest(ctx context.Context, r *Request) (*http.Request, error) {
-	body, err := buildRequestBody(r)
-	if err != nil {
-		return nil, err
-	}
-	u, err := url.JoinPath(c.Endpoint, "chat/completions")
-	if err != nil {
-		return nil, fmt.Errorf("build URL: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	if r.Stream {
-		req.Header.Set("Accept", "text/event-stream")
-	}
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-	return req, nil
 }
 
 // Complete issues a buffered (non-streaming) chat-completion request.
@@ -90,7 +68,7 @@ func (c *Client) Complete(ctx context.Context, r *Request) (*Response, error) {
 	if err != nil {
 		return nil, wrapTransport(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -191,6 +169,32 @@ func wrapTransport(err error) error {
 		return &TimeoutError{Which: "cancelled", Err: err}
 	}
 	return &NetworkError{Err: err}
+}
+
+// newRequest builds the HTTP request for a chat completion. Returned request
+// already has the Authorization header set (if the API key is non-empty).
+func (c *Client) newRequest(ctx context.Context, r *Request) (*http.Request, error) {
+	body, err := buildRequestBody(r)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.JoinPath(c.Endpoint, "chat/completions")
+	if err != nil {
+		return nil, fmt.Errorf("build URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	if r.Stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	return req, nil
 }
 
 // NetworkError is a transport-layer failure (DNS, connection refused,

@@ -19,22 +19,24 @@ func FormatError(w io.Writer, err error, verbose int) {
 	code := CodeOf(err)
 	msg := strings.TrimSpace(err.Error())
 
+	const maxBodyLen = 4096
+
 	if cat == CatGeneric {
-		fmt.Fprintf(w, "askit: %s  (exit %d)\n", msg, code)
+		_, _ = fmt.Fprintf(w, "askit: %s  (exit %d)\n", msg, code)
 	} else {
-		fmt.Fprintf(w, "askit: %s: %s  (exit %d)\n", cat, msg, code)
+		_, _ = fmt.Fprintf(w, "askit: %s: %s  (exit %d)\n", cat, msg, code)
 	}
 
 	if verbose >= 1 {
 		if h := Hint(err); h != "" {
-			fmt.Fprintf(w, "  hint: %s\n", h)
+			_, _ = fmt.Fprintf(w, "  hint: %s\n", h)
 		}
 	}
 	if verbose >= 2 && cat == CatAPI {
 		if body := APIBody(err); body != "" {
-			fmt.Fprintln(w, "  body:")
-			for line := range strings.SplitSeq(truncate(body, 4096), "\n") {
-				fmt.Fprintf(w, "    %s\n", line)
+			_, _ = fmt.Fprintln(w, "  body:")
+			for line := range strings.SplitSeq(truncate(body, maxBodyLen), "\n") {
+				_, _ = fmt.Fprintf(w, "    %s\n", line)
 			}
 		}
 	}
@@ -76,14 +78,15 @@ func APIBody(err error) string {
 func unwrapOnce(err error) error {
 	type unwrapper interface{ Unwrap() error }
 	if u, ok := err.(unwrapper); ok {
+		//nolint:wrapcheck // intentional: this is an unwrapping utility, not a boundary
 		return u.Unwrap()
 	}
 	return nil
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "… (truncated)"
+	return s[:maxLen] + "… (truncated)"
 }

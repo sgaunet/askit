@@ -1,10 +1,17 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"unicode/utf8"
+)
+
+// Sentinel errors for text file loading.
+var (
+	errIsDirectory = errors.New("is a directory")
+	errNotUTF8     = errors.New("not valid UTF-8")
 )
 
 // LoadTextRef reads a text reference, enforces the configured size limit,
@@ -19,14 +26,15 @@ func LoadTextRef(path string, maxKB int) (string, int64, error) {
 		return "", 0, fmt.Errorf("stat %s: %w", path, err)
 	}
 	if info.IsDir() {
-		return "", 0, fmt.Errorf("%s: is a directory", path)
+		return "", 0, fmt.Errorf("%s: %w", path, errIsDirectory)
 	}
-	sizeKB := info.Size() / 1024
+	const bytesPerKB = 1024
+	sizeKB := info.Size() / bytesPerKB
 	if int(sizeKB) > maxKB {
 		return "", info.Size(), &SizeError{
 			Path:     path,
 			Got:      info.Size(),
-			Limit:    int64(maxKB) * 1024,
+			Limit:    int64(maxKB) * bytesPerKB,
 			Kind:     "text",
 			LimitKey: "max_text_size_kb",
 		}
@@ -36,7 +44,7 @@ func LoadTextRef(path string, maxKB int) (string, int64, error) {
 		return "", info.Size(), fmt.Errorf("read %s: %w", path, err)
 	}
 	if !utf8.Valid(body) {
-		return "", info.Size(), fmt.Errorf("%s: not valid UTF-8", path)
+		return "", info.Size(), fmt.Errorf("%s: %w", path, errNotUTF8)
 	}
 	base := filepath.Base(path)
 	return fmt.Sprintf("```%s\n%s\n```", base, body), info.Size(), nil
@@ -62,7 +70,7 @@ func (e *SizeError) Error() string {
 
 // Hint returns advice on how to fix the violation.
 func (e *SizeError) Hint() string {
-	if e.Kind == "image" {
+	if e.Kind == kindImageLabel {
 		return "enable file_references.resize_images or raise file_references.max_image_size_mb"
 	}
 	return "raise file_references.max_text_size_kb or trim the input"

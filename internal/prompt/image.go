@@ -23,12 +23,19 @@ import (
 // `image_url` content part. The size limit is enforced on the ENCODED
 // payload (FR-028): a large raw image that fits after resize+recompress
 // passes.
-func LoadImageRef(path string, policy config.FileRefsPolicy) (dataURL, mediaType string, bytes int64, err error) {
+// LoadImageRef reads an image reference, optionally resizes it, base64
+// encodes the result, and returns a data URL suitable for an OpenAI
+// `image_url` content part. The size limit is enforced on the ENCODED
+// payload (FR-028): a large raw image that fits after resize+recompress
+// passes.
+func LoadImageRef(path string, policy config.FileRefsPolicy) (string, string, int64, error) {
+	const bytesPerMB = 1024 * 1024
+
 	raw, err := os.ReadFile(path) //nolint:gosec // path is user-supplied by design
 	if err != nil {
 		return "", "", 0, fmt.Errorf("read %s: %w", path, err)
 	}
-	mediaType = detectMediaType(path, raw)
+	mediaType := detectMediaType(path, raw)
 
 	// Optional resize: decode → resample with CatmullRom → re-encode as JPEG.
 	if policy.ResizeImages.Enabled {
@@ -43,19 +50,31 @@ func LoadImageRef(path string, policy config.FileRefsPolicy) (dataURL, mediaType
 	// Base64 encode and enforce size cap on encoded payload.
 	encoded := base64.StdEncoding.EncodeToString(raw)
 	totalBytes := int64(len(encoded))
-	limit := int64(policy.MaxImageSizeMB) * 1024 * 1024
+	limit := int64(policy.MaxImageSizeMB) * bytesPerMB
 	if totalBytes > limit {
 		return "", mediaType, totalBytes, &SizeError{
 			Path:     path,
 			Got:      totalBytes,
 			Limit:    limit,
-			Kind:     "image",
+			Kind:     kindImageLabel,
 			LimitKey: "max_image_size_mb",
 		}
 	}
-	dataURL = "data:" + mediaType + ";base64," + encoded
+	dataURL := "data:" + mediaType + ";base64," + encoded
 	return dataURL, mediaType, totalBytes, nil
 }
+
+// MIME type constants for image media types.
+const (
+	mimeImagePNG  = "image/png"
+	mimeImageJPEG = "image/jpeg"
+	mimeImageGIF  = "image/gif"
+	mimeImageWebP = "image/webp"
+	mimeImageBMP  = "image/bmp"
+
+	// sniffLen is the number of bytes passed to http.DetectContentType.
+	sniffLen = 512
+)
 
 // detectMediaType derives the MIME type from the extension when known,
 // otherwise sniffs from the first 512 bytes per `net/http.DetectContentType`.
@@ -63,17 +82,17 @@ func detectMediaType(path string, body []byte) string {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
 	switch ext {
 	case "png":
-		return "image/png"
+		return mimeImagePNG
 	case "jpg", "jpeg":
-		return "image/jpeg"
+		return mimeImageJPEG
 	case "gif":
-		return "image/gif"
+		return mimeImageGIF
 	case "webp":
-		return "image/webp"
+		return mimeImageWebP
 	case "bmp":
-		return "image/bmp"
+		return mimeImageBMP
 	}
-	return http.DetectContentType(body[:min(len(body), 512)])
+	return http.DetectContentType(body[:min(len(body), sniffLen)])
 }
 
 // maybeResize downsamples the image if its longer edge exceeds the limit,
@@ -101,16 +120,16 @@ func maybeResize(raw []byte, media string, policy config.ResizePolicy) ([]byte, 
 
 	var buf bytes.Buffer
 	switch media {
-	case "image/png":
+	case mimeImagePNG:
 		if err := png.Encode(&buf, dst); err != nil {
 			return nil, "", fmt.Errorf("encode png: %w", err)
 		}
-		return buf.Bytes(), "image/png", nil
+		return buf.Bytes(), mimeImagePNG, nil
 	default:
 		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: policy.JPEGQuality}); err != nil {
 			return nil, "", fmt.Errorf("encode jpeg: %w", err)
 		}
-		return buf.Bytes(), "image/jpeg", nil
+		return buf.Bytes(), mimeImageJPEG, nil
 	}
 }
 

@@ -74,12 +74,12 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // MarshalYAML emits the canonical duration string.
-func (d Duration) MarshalYAML() (any, error) {
-	return time.Duration(d).String(), nil
+func (d *Duration) MarshalYAML() (any, error) {
+	return time.Duration(*d).String(), nil
 }
 
 // AsDuration returns the underlying time.Duration.
-func (d Duration) AsDuration() time.Duration { return time.Duration(d) }
+func (d *Duration) AsDuration() time.Duration { return time.Duration(*d) }
 
 // Config is the resolved configuration for a single invocation.
 type Config struct {

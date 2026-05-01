@@ -55,40 +55,53 @@ func ResolvePreset(cfg *config.Config, name string, flags PresetFlags) (Resolved
 	}
 
 	if strings.TrimSpace(name) != "" {
-		preset, ok := cfg.Presets[name]
-		if !ok {
-			return ResolvedPreset{}, NewConfigErr(
-				"unknown preset %q; available: %s",
-				name, formatPresetNames(cfg.Presets),
-			)
-		}
-		// Preset system replaces — never merges.
-		out.System = preset.System
-		if preset.Temperature != nil {
-			out.Temperature = *preset.Temperature
-		}
-		if preset.TopP != nil {
-			out.TopP = *preset.TopP
-		}
-		if preset.MaxTokens != nil {
-			out.MaxTokens = *preset.MaxTokens
-		}
-		if preset.Seed != nil {
-			s := *preset.Seed
-			out.Seed = &s
-		}
-		if preset.Stream != nil {
-			out.Stream = *preset.Stream
-		}
-		if preset.Output != nil {
-			out.Output = *preset.Output
-		}
-		if preset.Model != nil {
-			out.Model = *preset.Model
+		if err := applyPresetLayer(cfg, name, &out); err != nil {
+			return ResolvedPreset{}, err
 		}
 	}
+	applyFlagLayer(flags, &out)
+	return out, nil
+}
 
-	// Flags win over preset and defaults.
+// applyPresetLayer merges the named preset into out. Returns an error when
+// the preset name is not found in cfg.Presets.
+func applyPresetLayer(cfg *config.Config, name string, out *ResolvedPreset) error {
+	preset, ok := cfg.Presets[name]
+	if !ok {
+		return NewConfigErr(
+			"unknown preset %q; available: %s",
+			name, formatPresetNames(cfg.Presets),
+		)
+	}
+	// Preset system replaces — never merges.
+	out.System = preset.System
+	if preset.Temperature != nil {
+		out.Temperature = *preset.Temperature
+	}
+	if preset.TopP != nil {
+		out.TopP = *preset.TopP
+	}
+	if preset.MaxTokens != nil {
+		out.MaxTokens = *preset.MaxTokens
+	}
+	if preset.Seed != nil {
+		s := *preset.Seed
+		out.Seed = &s
+	}
+	if preset.Stream != nil {
+		out.Stream = *preset.Stream
+	}
+	if preset.Output != nil {
+		out.Output = *preset.Output
+	}
+	if preset.Model != nil {
+		out.Model = *preset.Model
+	}
+	return nil
+}
+
+// applyFlagLayer overlays explicit CLI flags (highest precedence) onto out.
+func applyFlagLayer(flags PresetFlags, out *ResolvedPreset) {
 	if flags.System != nil {
 		out.System = *flags.System
 	}
@@ -114,8 +127,6 @@ func ResolvePreset(cfg *config.Config, name string, flags PresetFlags) (Resolved
 	if flags.Model != nil {
 		out.Model = *flags.Model
 	}
-
-	return out, nil
 }
 
 func formatPresetNames(presets map[string]config.Preset) string {

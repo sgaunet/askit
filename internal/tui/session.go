@@ -10,6 +10,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,17 @@ import (
 	"github.com/sgaunet/askit/internal/client"
 	"github.com/sgaunet/askit/internal/prompt"
 )
+
+// Sentinel errors for session save operations.
+var (
+	errUnsupportedExtension = errors.New("unsupported extension; use .json, .md, or .txt")
+	errNoAssistantReply     = errors.New("no assistant reply to save")
+)
+
+// dirPerm is the permission mode for newly created directories.
+// 0o750 is used (not 0o755) to avoid giving world-execute on directories
+// containing potentially sensitive configuration or saved conversations.
+const dirPerm = 0o750
 
 // Role is the message role in the transcript.
 type Role string
@@ -126,11 +138,11 @@ func (s *Session) SaveLastReply(path string) error {
 	case "json", "md", "txt":
 		// ok
 	default:
-		return fmt.Errorf("unsupported extension %q; use .json, .md, or .txt", ext)
+		return fmt.Errorf("extension %q: %w", ext, errUnsupportedExtension)
 	}
 	text := s.LastAssistantText()
 	if text == "" {
-		return fmt.Errorf("no assistant reply to save")
+		return errNoAssistantReply
 	}
 	if err := writeFileAtomic(path, []byte(text)); err != nil {
 		return fmt.Errorf("save-last: %w", err)
@@ -151,7 +163,7 @@ func (s *Session) SaveConversation(path string) error {
 	case "txt":
 		return saveText(path, s.History)
 	default:
-		return fmt.Errorf("unsupported extension %q; use .json, .md, or .txt", ext)
+		return fmt.Errorf("extension %q: %w", ext, errUnsupportedExtension)
 	}
 }
 
@@ -159,7 +171,7 @@ func (s *Session) SaveConversation(path string) error {
 // cli.AtomicWriter, duplicated here to avoid a transport-layer import.
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".askit-save-*")

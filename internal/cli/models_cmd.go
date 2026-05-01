@@ -31,9 +31,6 @@ func newModelsCommand(g *Globals) *cobra.Command {
 }
 
 func runModels(ctx context.Context, g *Globals, asJSON bool, out io.Writer) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	res, err := loadConfig(g)
 	if err != nil {
 		return err

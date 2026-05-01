@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 )
 
+// outDirPerm is the permission for newly created output parent directories.
+// 0o750 keeps group-read but excludes world access on sensitive output paths.
+const outDirPerm = 0o750
+
 // AtomicWriter writes to a temporary sibling file and, on Commit, atomically
 // renames it over the target (FR-006). Writer failures trigger automatic
 // cleanup via Rollback.
@@ -44,7 +48,7 @@ func OpenOutput(path string, force bool) (*AtomicWriter, error) {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, outDirPerm); err != nil {
 		return nil, NewUsageErr("mkdir %s: %v", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".askit-out-*")

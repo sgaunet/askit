@@ -121,6 +121,7 @@ func applyPartial(cfg *Config, prov Provenance, p *PartialConfig, src Source) {
 	}
 }
 
+//nolint:dupl // applyDefaults and applyOverridesDefaults are structurally identical but differ in input types (PartialDefaults vs Overrides); unifying them would require reflection or an interface.
 func applyDefaults(cfg *Config, prov Provenance, d *PartialDefaults, src Source) {
 	if d.Temperature != nil {
 		cfg.Defaults.Temperature = *d.Temperature
@@ -202,6 +203,11 @@ func applyOverrides(cfg *Config, prov Provenance, ov Overrides) {
 		return
 	}
 	src := ov.Source
+	applyOverridesTopLevel(cfg, prov, ov, src)
+	applyOverridesDefaults(cfg, prov, ov, src)
+}
+
+func applyOverridesTopLevel(cfg *Config, prov Provenance, ov Overrides, src Source) {
 	if ov.Endpoint != nil {
 		cfg.Endpoint = *ov.Endpoint
 		prov["endpoint"] = src
@@ -214,6 +220,10 @@ func applyOverrides(cfg *Config, prov Provenance, ov Overrides) {
 		cfg.Model = *ov.Model
 		prov["model"] = src
 	}
+}
+
+//nolint:dupl // See applyDefaults — same reasoning applies here.
+func applyOverridesDefaults(cfg *Config, prov Provenance, ov Overrides, src Source) {
 	if ov.Temperature != nil {
 		cfg.Defaults.Temperature = *ov.Temperature
 		prov["defaults.temperature"] = src

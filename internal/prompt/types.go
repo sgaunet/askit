@@ -18,17 +18,22 @@ const (
 	KindText
 )
 
+// kindImageLabel is the canonical lowercase label for the image kind used in
+// SizeError.Kind fields and Kind.String(). Extracted to satisfy goconst.
+const kindImageLabel = "image"
+
 // String returns a short lowercase label matching the spec's
 // classification badges: "image", "text", "unknown".
 func (k Kind) String() string {
 	switch k {
 	case KindImage:
-		return "image"
+		return kindImageLabel
 	case KindText:
 		return "text"
-	default:
+	case KindUnknown:
 		return "unknown"
 	}
+	return "unknown"
 }
 
 // Token is one element produced by [Tokenize]: either a chunk of user prose

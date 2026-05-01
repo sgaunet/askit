@@ -1,10 +1,17 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+// Sentinel errors for tokenize failures.
+var (
+	errBareAtEnd        = errors.New("bare `@` at end of input (use \\@ to write a literal at-sign)")
+	errUnterminatedTick = errors.New("unterminated `@`<backtick> quoted path")
 )
 
 // Tokenize walks the prompt string once and returns the sequence of text
@@ -64,13 +71,15 @@ func Tokenize(s string) ([]Token, error) {
 // boundary — i.e. preceded by start-of-string, whitespace, or a punctuation
 // character. This matches the user-intuitive rule that `foo@bar.com` is
 // not a file reference.
+// wordBoundaryPreceders is the set of characters that, when immediately before
+// an `@`, mark a word boundary (i.e. the `@` starts a file reference).
+const wordBoundaryPreceders = " \t\n\r([{,;\"'"
+
 func atWordBoundary(runes []rune, i int) bool {
 	if i == 0 {
 		return true
 	}
-	prev := runes[i-1]
-	return prev == ' ' || prev == '\t' || prev == '\n' || prev == '\r' ||
-		prev == '(' || prev == '[' || prev == '{' || prev == ',' || prev == ';' || prev == '"' || prev == '\''
+	return strings.ContainsRune(wordBoundaryPreceders, runes[i-1])
 }
 
 // readRef reads the path portion starting at `@` (index i), plus any
@@ -79,70 +88,69 @@ func atWordBoundary(runes []rune, i int) bool {
 // (the outer loop's i++ accounts for `@` itself).
 func readRef(runes []rune, i int) (Token, int, error) {
 	if i+1 >= len(runes) {
-		return Token{}, 0, fmt.Errorf("bare `@` at end of input (use \\@ to write a literal at-sign)")
+		return Token{}, 0, errBareAtEnd
 	}
-	// Path body.
 	start := i + 1
-	var (
-		pathBuf strings.Builder
-		j       = start
-	)
+	raw, j, isQuoted, err := readRefPath(runes, start)
+	if err != nil {
+		return Token{}, 0, err
+	}
+	if raw == "" {
+		return Token{}, 0, fmt.Errorf("empty `@` reference at position %d: %w", i, errBareAtEnd)
+	}
+	kindOverride, path := parseKindSuffix(raw, isQuoted)
+	advance := j - i - 1
+	return Token{
+		Kind:         TokenFileRef,
+		RefPath:      expandHome(path),
+		KindOverride: kindOverride,
+	}, advance, nil
+}
 
+// readRefPath reads the path portion of a @ref token starting at runes[start].
+// Returns the raw path text, the index after the last consumed rune, whether
+// the path was backtick-quoted, and any error.
+func readRefPath(runes []rune, start int) (string, int, bool, error) {
+	var pathBuf strings.Builder
+	j := start
 	if runes[start] == '`' {
-		// Backtick-quoted: consume until matching `.
 		j = start + 1
 		for ; j < len(runes) && runes[j] != '`'; j++ {
 			pathBuf.WriteRune(runes[j])
 		}
 		if j >= len(runes) {
-			return Token{}, 0, fmt.Errorf("unterminated `@`<backtick> quoted path")
+			return "", 0, false, errUnterminatedTick
 		}
-		// skip closing backtick
-		j++
-	} else {
-		// Bare path: consume up to whitespace or EOF (but treat `:` specially
-		// for kind suffix below).
-		for ; j < len(runes); j++ {
-			c := runes[j]
-			if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-				break
-			}
-			pathBuf.WriteRune(c)
+		j++ // skip closing backtick
+		return pathBuf.String(), j, true, nil
+	}
+	for ; j < len(runes); j++ {
+		c := runes[j]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			break
 		}
+		pathBuf.WriteRune(c)
 	}
+	return pathBuf.String(), j, false, nil
+}
 
-	raw := pathBuf.String()
-	if raw == "" {
-		return Token{}, 0, fmt.Errorf("empty `@` reference at position %d", i)
+// parseKindSuffix splits a trailing :text or :image kind specifier off raw.
+// isQuoted means the path came from backtick notation (no suffix allowed).
+func parseKindSuffix(raw string, isQuoted bool) (Kind, string) {
+	if isQuoted {
+		return KindUnknown, raw
 	}
-
-	// Split trailing :kind off (only for bare paths — backtick quotes are
-	// considered to contain only the path).
-	kindOverride := KindUnknown
-	path := raw
-	if idx := strings.LastIndex(raw, ":"); idx >= 0 && runes[start] != '`' {
-		suffix := raw[idx+1:]
-		switch suffix {
-		case "text":
-			kindOverride = KindText
-			path = raw[:idx]
-		case "image":
-			kindOverride = KindImage
-			path = raw[:idx]
-		}
+	idx := strings.LastIndex(raw, ":")
+	if idx < 0 {
+		return KindUnknown, raw
 	}
-
-	// Expand ~.
-	expanded := expandHome(path)
-
-	// Advance count = (j - i - 1) because the outer loop's `i++` will consume
-	// the `@` itself.
-	advance := j - i - 1
-	return Token{
-		Kind:         TokenFileRef,
-		RefPath:      expanded,
-		KindOverride: kindOverride,
-	}, advance, nil
+	switch raw[idx+1:] {
+	case "text":
+		return KindText, raw[:idx]
+	case "image":
+		return KindImage, raw[:idx]
+	}
+	return KindUnknown, raw
 }
 
 // expandHome expands a leading "~" or "~/" to the user's home directory.

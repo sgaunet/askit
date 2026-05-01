@@ -32,14 +32,21 @@ type RetryOptions struct {
 	sleep func(context.Context, time.Duration) error
 }
 
+// Default retry parameters per contract.
+const (
+	defaultMaxAttempts = 3
+	defaultBaseDelay   = 200 * time.Millisecond
+	defaultMaxDelay    = 10 * time.Second
+)
+
 // DefaultRetryOptions returns a RetryOptions populated with the defaults
 // from contracts: MaxAttempts=3 (initial + 2 retries), BaseDelay=200ms,
 // MaxDelay=10s.
 func DefaultRetryOptions() RetryOptions {
 	return RetryOptions{
-		MaxAttempts: 3,
-		BaseDelay:   200 * time.Millisecond,
-		MaxDelay:    10 * time.Second,
+		MaxAttempts: defaultMaxAttempts,
+		BaseDelay:   defaultBaseDelay,
+		MaxDelay:    defaultMaxDelay,
 	}
 }
 
@@ -56,21 +63,10 @@ func DefaultRetryOptions() RetryOptions {
 //
 // If ctx is cancelled or its deadline is reached during a backoff, the
 // most recent error is returned wrapped in a [TimeoutError].
+//nolint:ireturn // T is constrained to any by the generic type parameter; the concrete type is determined at call site.
 func DoWithRetry[T any](ctx context.Context, opts RetryOptions, fn func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
-
-	if opts.MaxAttempts <= 0 {
-		opts.MaxAttempts = 1
-	}
-	if opts.BaseDelay <= 0 {
-		opts.BaseDelay = 200 * time.Millisecond
-	}
-	if opts.MaxDelay <= 0 {
-		opts.MaxDelay = 10 * time.Second
-	}
-	if opts.sleep == nil {
-		opts.sleep = realSleep
-	}
+	normalizeRetryOptions(&opts)
 
 	var lastErr error
 	for attempt := 1; attempt <= opts.MaxAttempts; attempt++ {
@@ -82,22 +78,47 @@ func DoWithRetry[T any](ctx context.Context, opts RetryOptions, fn func(ctx cont
 		if !retryable(err) || attempt == opts.MaxAttempts {
 			return zero, err
 		}
-		delay := backoffDelay(attempt, opts.BaseDelay, opts.MaxDelay)
-		if ra, ok := retryAfter(err, opts.now); ok && ra > delay {
-			delay = ra
-		}
-		if opts.Logger != nil {
-			opts.Logger.Info("retry scheduled",
-				slog.Int("attempt", attempt),
-				slog.Duration("delay", delay),
-				slog.String("reason", err.Error()),
-			)
-		}
-		if err := opts.sleep(ctx, delay); err != nil {
-			return zero, &TimeoutError{Which: "retry-backoff", Err: fmt.Errorf("%w (last error: %s)", err, lastErr.Error())}
+		if serr := waitForRetry(ctx, attempt, err, lastErr, opts); serr != nil {
+			return zero, serr
 		}
 	}
 	return zero, lastErr
+}
+
+// normalizeRetryOptions fills in zero-value fields with their defaults.
+func normalizeRetryOptions(opts *RetryOptions) {
+	if opts.MaxAttempts <= 0 {
+		opts.MaxAttempts = 1
+	}
+	if opts.BaseDelay <= 0 {
+		opts.BaseDelay = defaultBaseDelay
+	}
+	if opts.MaxDelay <= 0 {
+		opts.MaxDelay = defaultMaxDelay
+	}
+	if opts.sleep == nil {
+		opts.sleep = realSleep
+	}
+}
+
+// waitForRetry computes and executes the backoff delay for one retry.
+// Returns a *TimeoutError when the context is cancelled during the wait.
+func waitForRetry(ctx context.Context, attempt int, err, lastErr error, opts RetryOptions) error {
+	delay := backoffDelay(attempt, opts.BaseDelay, opts.MaxDelay)
+	if ra, ok := retryAfter(err, opts.now); ok && ra > delay {
+		delay = ra
+	}
+	if opts.Logger != nil {
+		opts.Logger.Info("retry scheduled",
+			slog.Int("attempt", attempt),
+			slog.Duration("delay", delay),
+			slog.String("reason", err.Error()),
+		)
+	}
+	if serr := opts.sleep(ctx, delay); serr != nil {
+		return &TimeoutError{Which: "retry-backoff", Err: fmt.Errorf("%w (last error: %s)", serr, lastErr.Error())}
+	}
+	return nil
 }
 
 // retryable reports whether err matches the eligibility rules documented
@@ -166,7 +187,7 @@ func backoffDelay(attempt int, base, maxD time.Duration) time.Duration {
 	if exp <= 0 {
 		return 0
 	}
-	return time.Duration(rand.Int64N(int64(exp) + 1))
+	return time.Duration(rand.Int64N(int64(exp) + 1)) //nolint:gosec // G404: jitter for backoff does not need crypto/rand
 }
 
 func realSleep(ctx context.Context, d time.Duration) error {
@@ -179,6 +200,6 @@ func realSleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("sleep interrupted: %w", ctx.Err())
 	}
 }

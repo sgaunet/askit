@@ -32,7 +32,8 @@ func Classify(tok Token, policy config.FileRefsPolicy) (Kind, bool) {
 		return KindText, false
 	case config.UnknownImage:
 		return KindImage, false
-	default:
+	case config.UnknownError, config.UnknownSkip:
 		return KindUnknown, false
 	}
+	return KindUnknown, false
 }

@@ -66,52 +66,11 @@ func DefaultConfigPath() (string, error) {
 // tolerated; returns validation errors aggregated into a single wrapped
 // ValidationError.
 func Load(opts LoadOptions) (*Result, error) {
-	var files []FileLayer
-
-	// Default file (only loaded if no explicit override; contracts §precedence).
-	// We always try both when present: an explicit file takes precedence
-	// via layer order, but the default file's values contribute whichever
-	// fields the explicit file doesn't set. This matches the spec's
-	// "precedence per field" reading.
-	defaultPath, derr := DefaultConfigPath()
-	if derr == nil {
-		defaultLayer, err := loadOptionalFile(defaultPath, SourceDefaultFile)
-		if err != nil {
-			return nil, err
-		}
-		if defaultLayer != nil {
-			files = append(files, *defaultLayer)
-		}
+	files, defaultPath, err := collectFileLayers(opts)
+	if err != nil {
+		return nil, err
 	}
-
-	// Explicit file: used only if ExplicitPath is set AND differs from
-	// default; otherwise default-file already covered it. Explicit-file
-	// errors (missing, malformed) are fatal because the user asked for
-	// that file specifically.
-	var resolvedPath string
-	loaded := false
-	if strings.TrimSpace(opts.ExplicitPath) != "" {
-		resolvedPath = opts.ExplicitPath
-		src := opts.ExplicitSource
-		if src == "" {
-			src = SourceExplicitFile
-		}
-		partial, err := LoadFile(opts.ExplicitPath)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, FileLayer{Partial: partial, Source: src})
-		loaded = true
-	} else if defaultPath != "" {
-		// Loaded-from-path reflects the default file only if it existed.
-		for _, f := range files {
-			if f.Source == SourceDefaultFile && f.Partial != nil {
-				resolvedPath = defaultPath
-				loaded = true
-				break
-			}
-		}
-	}
+	resolvedPath, loaded := resolvePathInfo(opts, files, defaultPath)
 
 	cfg, prov, err := Merge(files, opts.EnvOverrides, opts.FlagOverrides)
 	if err != nil {
@@ -126,6 +85,52 @@ func Load(opts LoadOptions) (*Result, error) {
 		ResolvedPath:   resolvedPath,
 		LoadedFromPath: loaded,
 	}, nil
+}
+
+// collectFileLayers builds the ordered list of FileLayer entries from the
+// default config path and any explicitly-set config path.
+func collectFileLayers(opts LoadOptions) ([]FileLayer, string, error) {
+	var files []FileLayer
+
+	defaultPath, derr := DefaultConfigPath()
+	if derr == nil {
+		defaultLayer, err := loadOptionalFile(defaultPath, SourceDefaultFile)
+		if err != nil {
+			return nil, "", err
+		}
+		if defaultLayer != nil {
+			files = append(files, *defaultLayer)
+		}
+	}
+
+	if strings.TrimSpace(opts.ExplicitPath) == "" {
+		return files, defaultPath, nil
+	}
+
+	src := opts.ExplicitSource
+	if src == "" {
+		src = SourceExplicitFile
+	}
+	partial, err := LoadFile(opts.ExplicitPath)
+	if err != nil {
+		return nil, "", err
+	}
+	files = append(files, FileLayer{Partial: partial, Source: src})
+	return files, defaultPath, nil
+}
+
+// resolvePathInfo determines the resolved config file path and whether any
+// file was actually loaded.
+func resolvePathInfo(opts LoadOptions, files []FileLayer, defaultPath string) (string, bool) {
+	if strings.TrimSpace(opts.ExplicitPath) != "" {
+		return opts.ExplicitPath, true
+	}
+	for _, f := range files {
+		if f.Source == SourceDefaultFile && f.Partial != nil {
+			return defaultPath, true
+		}
+	}
+	return "", false
 }
 
 func loadOptionalFile(path string, src Source) (*FileLayer, error) {

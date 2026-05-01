@@ -55,10 +55,20 @@ type wireImgURL struct {
 // buildRequestBody converts a [Request] into the JSON body expected by the
 // endpoint. System prompt (if any) becomes the first message.
 func buildRequestBody(r *Request) ([]byte, error) {
-	body := chatReq{
-		Model:  r.Model,
-		Stream: r.Stream,
+	body := buildChatReq(r)
+	if err := appendMessages(&body, r.Prompt); err != nil {
+		return nil, err
 	}
+	out, err := json.Marshal(body)
+	if err != nil {
+		return nil, encodeErr("request body", err)
+	}
+	return out, nil
+}
+
+// buildChatReq populates the scalar fields of chatReq from r.
+func buildChatReq(r *Request) chatReq {
+	body := chatReq{Model: r.Model, Stream: r.Stream}
 	if r.Temperature != 0 {
 		t := r.Temperature
 		body.Temperature = &t
@@ -78,32 +88,30 @@ func buildRequestBody(r *Request) ([]byte, error) {
 	if r.Stream {
 		body.StreamOpts = &streamOpts{IncludeUsage: true}
 	}
+	return body
+}
 
-	if r.Prompt.System != "" {
-		sysJSON, err := json.Marshal(r.Prompt.System)
-		if err != nil {
-			return nil, encodeErr("system", err)
-		}
-		body.Messages = append(body.Messages, wireMsg{
-			Role:    "system",
-			Content: jsonRaw(sysJSON),
-		})
+// appendMessages adds the system message (if any) and all user/assistant
+// messages to body.Messages, encoding content parts to JSON.
+func appendMessages(body *chatReq, p *prompt.Prompt) error {
+	if p == nil {
+		return nil
 	}
-	for _, m := range r.Prompt.Messages {
+	if p.System != "" {
+		sysJSON, err := json.Marshal(p.System)
+		if err != nil {
+			return encodeErr("system", err)
+		}
+		body.Messages = append(body.Messages, wireMsg{Role: "system", Content: jsonRaw(sysJSON)})
+	}
+	for _, m := range p.Messages {
 		content, err := encodeContent(m.Content)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		body.Messages = append(body.Messages, wireMsg{
-			Role:    m.Role,
-			Content: content,
-		})
+		body.Messages = append(body.Messages, wireMsg{Role: m.Role, Content: content})
 	}
-	out, err := json.Marshal(body)
-	if err != nil {
-		return nil, encodeErr("request body", err)
-	}
-	return out, nil
+	return nil
 }
 
 func encodeContent(parts []prompt.ContentPart) (jsonRaw, error) {

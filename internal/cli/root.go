@@ -63,7 +63,7 @@ func newRootCommand() (*cobra.Command, *Globals) {
 
 	root.RunE = func(cmd *cobra.Command, _ []string) error {
 		if showVersion {
-			fmt.Fprintln(cmd.OutOrStdout(), version.Info())
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), version.Info())
 			return nil
 		}
 		return cmd.Help()
@@ -90,4 +90,3 @@ func newRootCommand() (*cobra.Command, *Globals) {
 
 	return root, g
 }
-
