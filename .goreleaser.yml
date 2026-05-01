@@ -59,18 +59,23 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: askit
+    ids:
+      - default
+    homepage: 'https://github.com/sgaunet/askit'
+    description: 'Terminal client for OpenAI-compatible chat completion APIs with @path file references and named presets'
+    directory: Casks
+    binaries:
+      - askit
+    commit_author:
+      name: sgaunet
+      email: 1552102+sgaunet@users.noreply.github.com
+    repository:
       owner: sgaunet
       name: homebrew-tools
-    directory: Formula
-    homepage: https://github.com/sgaunet/askit
-    description: Terminal client for OpenAI-compatible chat completion APIs with @path file references and named presets
-    license: MIT
-    install: |
-      bin.install "askit"
-    test: |
-      assert_match version.to_s, shell_output("#{bin}/askit --version")
+      # Token with 'repo' scope is required for pushing to a different repository
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
 
 release:
   github:
