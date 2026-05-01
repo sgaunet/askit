@@ -25,7 +25,7 @@ tasks:
   build:
     desc: Build the askit binary
     cmds:
-      - go build -ldflags '{{.LDFLAGS}}' -o {{.BUILD_DIR}}/{{.BIN}} .askit
+      - go build -ldflags '{{.LDFLAGS}}' -o {{.BUILD_DIR}}/{{.BIN}} ./cmd/askit
 
   install:
     desc: Install askit into GOPATH/bin
