@@ -1,0 +1,9 @@
+# Binaries
+/dist/
+coverage.out
+coverage.html
+# OS
+.DS_Store
+Thumbs.db
+# Release artifacts
+/dist/

@@ -1,0 +1,81 @@
+version: '3'
+
+vars:
+  BIN: askit
+  MODULE: github.com/sgaunet/askit
+  BUILD_DIR: dist
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  DATE:
+    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+  LDFLAGS: >-
+    -s -w
+    -X {{.MODULE}}/internal/version.Version={{.VERSION}}
+    -X {{.MODULE}}/internal/version.Commit={{.COMMIT}}
+    -X {{.MODULE}}/internal/version.Date={{.DATE}}
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the askit binary
+    cmds:
+      - go build -ldflags '{{.LDFLAGS}}' -o {{.BUILD_DIR}}/{{.BIN}} ./cmd/askit
+
+  install:
+    desc: Install askit into GOPATH/bin
+    cmds:
+      - go install -ldflags '{{.LDFLAGS}}' ./cmd/askit
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run unit tests with race detector (CI gate)
+    cmds:
+      - go test -race -timeout 120s ./...
+
+  test:cover:
+    desc: Run tests with coverage profile
+    cmds:
+      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - go tool cover -func=coverage.out
+
+  fmt:
+    desc: Format Go sources
+    cmds:
+      - gofmt -s -w .
+      - go tool -modfile=go.mod goimports -w . 2>/dev/null || goimports -w . 2>/dev/null || true
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  tidy:
+    desc: go mod tidy + verify
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  snapshot:
+    desc: goreleaser snapshot build (no release)
+    cmds:
+      - goreleaser release --snapshot --clean --skip=publish
+
+  release:
+    desc: Publish a release via goreleaser (driven by a pushed tag in CI)
+    cmds:
+      - goreleaser release --clean
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}} coverage.out

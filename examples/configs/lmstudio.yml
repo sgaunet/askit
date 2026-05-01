@@ -1,0 +1,52 @@
+# LM Studio + OCR presets — matches contracts/config-schema.md
+#
+# Copy this file to ~/.config/askit/config.yml and adjust the endpoint /
+# model to match your local LM Studio setup.
+
+endpoint: http://localhost:1234/v1
+api_key: lm-studio
+model: chandra-ocr-2
+
+defaults:
+  temperature: 0.2
+  max_tokens: 4096
+  stream: true
+  output: plain
+  timeout: 60s
+  stream_idle_timeout: 5m   # OCR of a multi-column page can be slow
+  retries: 0                 # local server: retrying rarely helps
+
+file_references:
+  max_image_size_mb: 30
+  resize_images:
+    enabled: true
+    max_long_edge_px: 2048
+    jpeg_quality: 85
+
+presets:
+  ocr-plain:
+    system: |
+      You are an OCR engine. Extract all text from the provided images,
+      verbatim, preserving line breaks. Do not comment, translate, or summarise.
+    temperature: 0.0
+    max_tokens: 8192
+    output: plain
+
+  ocr-md:
+    system: |
+      Extract text from the provided images, Do not add content. Remove html tags, render output in Markdown format.
+    prompt: |
+      Extract text from the provided images, Do not add content. Remove html tags, render output in Markdown format.
+    temperature: 0.1
+    max_tokens: 8192
+
+  ocr-json:
+    system: |
+      Extract text from the provided images and return a JSON object with
+      fields: text (string), tables (array), figures (array). Return only JSON.
+    temperature: 0.0
+    output: json
+
+  describe:
+    system: Describe the content of the provided images briefly and factually.
+    temperature: 0.3

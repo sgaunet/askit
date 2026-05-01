@@ -1,0 +1,80 @@
+version: 2
+project_name: askit
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: askit
+    main: ./cmd/askit
+    binary: askit
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/sgaunet/askit/internal/version.Version={{.Version}}
+      - -X github.com/sgaunet/askit/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/sgaunet/askit/internal/version.Date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - repository:
+      owner: sgaunet
+      name: homebrew-tools
+    directory: Formula
+    homepage: https://github.com/sgaunet/askit
+    description: Terminal client for OpenAI-compatible chat completion APIs with @path file references and named presets
+    license: MIT
+    install: |
+      bin.install "askit"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/askit --version")
+
+release:
+  github:
+    owner: sgaunet
+    name: askit
+  draft: false
+  prerelease: auto

@@ -1,0 +1,14 @@
+# Remote vLLM — typical pattern for a shared inference server.
+
+endpoint: https://vllm.example.com/v1
+api_key: set-via-env
+model: llama-3.1-70b-instruct
+
+defaults:
+  temperature: 0.2
+  max_tokens: 4096
+  stream: true
+  output: plain
+  timeout: 60s
+  stream_idle_timeout: 2m
+  retries: 2
