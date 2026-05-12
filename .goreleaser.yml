@@ -76,6 +76,15 @@ homebrew_casks:
       name: homebrew-tools
       # Token with 'repo' scope is required for pushing to a different repository
       token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+    # Strip the macOS quarantine xattr so Gatekeeper does not block the
+    # unsigned binary on first launch. Long-term fix is Apple Developer ID
+    # signing + notarization.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/askit"]
+          end
 
 release:
   github:
