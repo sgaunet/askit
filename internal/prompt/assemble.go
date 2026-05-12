@@ -162,6 +162,8 @@ func detectTextMedia(path string) string {
 		return "text/html"
 	case "xml":
 		return "application/xml"
+	case "svg":
+		return "image/svg+xml"
 	case "csv":
 		return "text/csv"
 	case "tsv":

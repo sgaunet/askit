@@ -37,7 +37,7 @@ func Builtins() *Config {
 			ImageExtensions: []string{"png", "jpg", "jpeg", "webp", "gif", "bmp"},
 			TextExtensions: []string{
 				"txt", "md", "json", "yaml", "yml", "toml", "csv", "tsv", "log",
-				"go", "py", "rs", "sh", "js", "ts", "html", "xml", "sql", "ini", "conf",
+				"go", "py", "rs", "sh", "js", "ts", "html", "xml", "svg", "sql", "ini", "conf",
 			},
 			MaxImageSizeMB:  defaultMaxImageSizeMB,
 			MaxTextSizeKB:   defaultMaxTextSizeKB,

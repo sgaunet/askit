@@ -20,6 +20,7 @@ func TestClassify(t *testing.T) {
 		{"image by ext", prompt.Token{RefPath: "/x/y.png"}, prompt.KindImage, false},
 		{"jpg alt", prompt.Token{RefPath: "/x/y.JPG"}, prompt.KindImage, false},
 		{"text by ext", prompt.Token{RefPath: "/x/y.md"}, prompt.KindText, false},
+		{"svg as text", prompt.Token{RefPath: "/x/y.svg"}, prompt.KindText, false},
 		{"unknown with error strategy", prompt.Token{RefPath: "/x/y.pdf"}, prompt.KindUnknown, false},
 		{"override text", prompt.Token{RefPath: "/x/y.dat", KindOverride: prompt.KindText}, prompt.KindText, true},
 		{"override image", prompt.Token{RefPath: "/x/y.raw", KindOverride: prompt.KindImage}, prompt.KindImage, true},
