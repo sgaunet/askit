@@ -74,52 +74,86 @@ func (c *Client) Complete(ctx context.Context, r *Request) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, &APIError{
 			Status: resp.StatusCode,
 			Body:   raw,
 			Header: resp.Header.Clone(),
 		}
 	}
+	return decodeCompletion(resp, raw, started)
+}
 
-	var parsed struct {
-		Choices []struct {
-			FinishReason string `json:"finish_reason"`
-			Message      struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage Usage `json:"usage"`
-	}
+// completionEnvelope mirrors the subset of the OpenAI chat-completion
+// response we care about, including the `error` field used by some
+// upstream proxies that return HTTP 200 with a failure envelope.
+type completionEnvelope struct {
+	Choices []struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage Usage `json:"usage"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    string `json:"code"`
+	} `json:"error"`
+}
+
+// decodeCompletion parses a successful HTTP response body and rejects
+// semantically-invalid 200 responses with an APIError so the CLI exits
+// non-zero. Validation rules:
+//   - empty choices         → APIError (with envelope message if present)
+//   - finish_reason="error" → APIError
+func decodeCompletion(resp *http.Response, raw []byte, started time.Time) (*Response, error) {
+	var parsed completionEnvelope
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
-	var text, finish string
-	if len(parsed.Choices) > 0 {
-		text = parsed.Choices[0].Message.Content
-		finish = parsed.Choices[0].FinishReason
+	if len(parsed.Choices) == 0 {
+		detail := "upstream returned no choices"
+		if parsed.Error != nil && parsed.Error.Message != "" {
+			detail = parsed.Error.Message
+		}
+		return nil, &APIError{Status: resp.StatusCode, Body: raw, Header: resp.Header.Clone(), Detail: detail}
+	}
+	if parsed.Choices[0].FinishReason == "error" {
+		return nil, &APIError{Status: resp.StatusCode, Body: raw, Header: resp.Header.Clone(), Detail: "upstream finished with finish_reason=error"}
 	}
 	return &Response{
-		Text:         text,
-		FinishReason: finish,
+		Text:         parsed.Choices[0].Message.Content,
+		FinishReason: parsed.Choices[0].FinishReason,
 		Usage:        parsed.Usage,
 		Raw:          raw,
 		Duration:     time.Since(started),
 	}, nil
 }
 
-// APIError is a non-2xx upstream response. The CLI layer maps it to exit
-// code 6 via [cli.NewAPIErr].
+// APIError is an upstream response that the client refuses to treat as a
+// success. The CLI layer maps it to exit code 6 via [cli.NewAPIErr].
+//
+// Status is the HTTP status code; for malformed-but-200 responses
+// (empty choices, error envelope on 200, mid-stream error event, etc.)
+// Status remains 200 and Detail carries the synthesized reason.
 type APIError struct {
 	Status int
 	Body   []byte
 	Header http.Header
+	// Detail is an optional client-synthesized message used when the
+	// upstream body does not itself parse as an OpenAI error envelope.
+	// When set, it takes precedence over [summarizeBody] in [Error].
+	Detail string
 }
 
 // Error renders the status line plus a one-line summary extracted from the
-// body (when parseable as OpenAI's error envelope).
+// body (when parseable as OpenAI's error envelope) or Detail (when set).
 func (a *APIError) Error() string {
-	msg := summarizeBody(a.Body)
+	msg := a.Detail
+	if msg == "" {
+		msg = summarizeBody(a.Body)
+	}
 	if msg != "" {
 		return fmt.Sprintf("%d %s: %s", a.Status, http.StatusText(a.Status), msg)
 	}
