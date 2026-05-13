@@ -16,6 +16,12 @@ import (
 // errStreamIdleTimeout is the sentinel wrapped into TimeoutError for stream-idle violations.
 var errStreamIdleTimeout = errors.New("stream-idle timeout")
 
+// synthesizedStreamStatus is the Status we report on *APIError values that
+// describe a malformed-but-200 streaming response. Keeping it at 200
+// distinguishes these from genuine non-2xx responses, which carry the
+// upstream status verbatim.
+const synthesizedStreamStatus = http.StatusOK
+
 // Stream issues a streaming chat-completion request and returns a channel
 // of [StreamChunk] plus an error channel that carries at most one failure
 // before closing. Callers MUST drain both; closing the returned context
@@ -76,6 +82,11 @@ func (c *Client) Stream(ctx context.Context, r *Request) (<-chan StreamChunk, <-
 // drainSSE reads the server-sent events stream and pushes deltas on the
 // chunks channel. The per-chunk idle timer is reset whenever a new byte
 // arrives.
+//
+// Returns an *APIError when the stream closes cleanly (EOF) without ever
+// delivering a [DONE] marker AND without producing any chunk — that
+// pattern indicates the upstream truncated the response before any
+// payload reached us.
 func (c *Client) drainSSE(ctx context.Context, body io.Reader, chunks chan<- StreamChunk) error {
 	idle := time.NewTimer(c.StreamIdleTimeout)
 	defer idle.Stop()
@@ -85,19 +96,31 @@ func (c *Client) drainSSE(ctx context.Context, body io.Reader, chunks chan<- Str
 	lineCh, errCh := startLineReader(readCtx, bufio.NewReader(body))
 
 	var event bytes.Buffer
+	var st sseState
 	for {
-		done, err := c.drainSSEStep(ctx, idle, lineCh, errCh, chunks, &event)
+		done, err := c.drainSSEStep(ctx, idle, lineCh, errCh, chunks, &event, &st)
 		if err != nil {
 			return err
 		}
 		if done {
-			return nil
+			if st.sawDone || st.chunks > 0 {
+				return nil
+			}
+			return &APIError{Status: synthesizedStreamStatus, Detail: "stream closed before any data was received"}
 		}
 	}
 }
 
+// sseState tracks loop-scoped counters used to decide whether a clean
+// EOF should be treated as success or as an empty-stream API error.
+type sseState struct {
+	sawDone bool
+	chunks  int
+}
+
 // drainSSEStep processes one select iteration of the SSE event loop.
-// Returns (done=true, nil) when the [DONE] terminator is seen.
+// Returns (done=true, nil) when the stream loop should exit (either the
+// [DONE] terminator is seen or the underlying reader hits EOF).
 func (c *Client) drainSSEStep(
 	ctx context.Context,
 	idle *time.Timer,
@@ -105,6 +128,7 @@ func (c *Client) drainSSEStep(
 	errCh <-chan error,
 	chunks chan<- StreamChunk,
 	event *bytes.Buffer,
+	st *sseState,
 ) (bool, error) {
 	select {
 	case <-ctx.Done():
@@ -112,18 +136,47 @@ func (c *Client) drainSSEStep(
 	case <-idle.C:
 		return false, &TimeoutError{Which: "stream-idle", Err: fmt.Errorf("no chunk within %s: %w", c.StreamIdleTimeout, errStreamIdleTimeout)}
 	case err := <-errCh:
+		// The line reader and the error path are independent channels,
+		// so on EOF a line may still be buffered. Drain whatever's
+		// pending and dispatch a half-buffered event before declaring
+		// the stream done.
 		if errors.Is(err, io.EOF) {
+			if drainErr := drainPending(lineCh, event, chunks, st); drainErr != nil {
+				return false, drainErr
+			}
 			return true, nil
 		}
 		return false, fmt.Errorf("read stream: %w", err)
 	case line := <-lineCh:
 		resetTimer(idle, c.StreamIdleTimeout)
-		return processSSELine(string(line), event, chunks)
+		return processSSELine(string(line), event, chunks, st)
+	}
+}
+
+// drainPending consumes any line still buffered in lineCh and flushes the
+// remaining event buffer before the loop exits on EOF.
+func drainPending(lineCh <-chan []byte, event *bytes.Buffer, chunks chan<- StreamChunk, st *sseState) error {
+	for {
+		select {
+		case line := <-lineCh:
+			if _, err := processSSELine(string(line), event, chunks, st); err != nil {
+				return err
+			}
+		default:
+			if event.Len() > 0 {
+				if _, err := dispatchEvent(event.Bytes(), chunks, st); err != nil {
+					event.Reset()
+					return err
+				}
+				event.Reset()
+			}
+			return nil
+		}
 	}
 }
 
 // processSSELine handles one raw SSE line. Returns (done, err).
-func processSSELine(line string, event *bytes.Buffer, chunks chan<- StreamChunk) (bool, error) {
+func processSSELine(line string, event *bytes.Buffer, chunks chan<- StreamChunk, st *sseState) (bool, error) {
 	trimmed := strings.TrimRight(line, "\r\n")
 	if strings.HasPrefix(trimmed, ":") {
 		// Comment / heartbeat — ignore.
@@ -138,7 +191,7 @@ func processSSELine(line string, event *bytes.Buffer, chunks chan<- StreamChunk)
 	if event.Len() == 0 {
 		return false, nil
 	}
-	done, err := dispatchEvent(event.Bytes(), chunks)
+	done, err := dispatchEvent(event.Bytes(), chunks, st)
 	event.Reset()
 	return done, err
 }
@@ -175,8 +228,9 @@ func startLineReader(ctx context.Context, r *bufio.Reader) (<-chan []byte, <-cha
 
 // dispatchEvent decodes a single SSE event (potentially multi-line `data:`
 // entries) and emits a StreamChunk. Returns done=true when the event is
-// the upstream's `[DONE]` terminator.
-func dispatchEvent(payload []byte, out chan<- StreamChunk) (bool, error) {
+// the upstream's `[DONE]` terminator. An error envelope or
+// `finish_reason:"error"` in the payload is surfaced as *APIError.
+func dispatchEvent(payload []byte, out chan<- StreamChunk, st *sseState) (bool, error) {
 	var dataParts []string
 	for line := range strings.SplitSeq(string(payload), "\n") {
 		if rest, ok := strings.CutPrefix(line, "data:"); ok {
@@ -188,6 +242,7 @@ func dispatchEvent(payload []byte, out chan<- StreamChunk) (bool, error) {
 		return false, nil
 	}
 	if data == "[DONE]" {
+		st.sawDone = true
 		return true, nil
 	}
 	var chunk struct {
@@ -198,15 +253,31 @@ func dispatchEvent(payload []byte, out chan<- StreamChunk) (bool, error) {
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 		Usage *Usage `json:"usage"`
+		Error *struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    string `json:"code"`
+		} `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 		return false, fmt.Errorf("decode sse chunk: %w", err)
+	}
+	if chunk.Error != nil {
+		detail := chunk.Error.Message
+		if detail == "" {
+			detail = "upstream signaled an error in stream"
+		}
+		return false, &APIError{Status: synthesizedStreamStatus, Body: []byte(data), Detail: detail}
 	}
 	sc := StreamChunk{Usage: chunk.Usage}
 	if len(chunk.Choices) > 0 {
 		sc.Delta = chunk.Choices[0].Delta.Content
 		sc.FinishReason = chunk.Choices[0].FinishReason
 	}
+	if sc.FinishReason == "error" {
+		return false, &APIError{Status: synthesizedStreamStatus, Body: []byte(data), Detail: "upstream finished with finish_reason=error"}
+	}
+	st.chunks++
 	out <- sc
 	return false, nil
 }
@@ -248,7 +319,3 @@ func DrainStream(chunks <-chan StreamChunk, errs <-chan error) (*Response, error
 		Usage:        usage,
 	}, nil
 }
-
-// Ensure the http package remains used even when client.go is the only
-// path that touches it in some builds.
-var _ = http.MethodPost
