@@ -3,7 +3,6 @@
 [![linter](https://github.com/sgaunet/askit/actions/workflows/linter.yml/badge.svg)](https://github.com/sgaunet/askit/actions/workflows/linter.yml)
 [![snapshot](https://github.com/sgaunet/askit/actions/workflows/snapshot.yml/badge.svg)](https://github.com/sgaunet/askit/actions/workflows/snapshot.yml)
 [![release](https://github.com/sgaunet/askit/actions/workflows/release.yml/badge.svg)](https://github.com/sgaunet/askit/actions/workflows/release.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sgaunet/askit)](https://goreportcard.com/report/github.com/sgaunet/askit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A terminal client for OpenAI-compatible chat-completion APIs (LM Studio,
