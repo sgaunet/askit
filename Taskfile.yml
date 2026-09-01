@@ -17,6 +17,11 @@ vars:
     -X {{.MODULE}}/internal/version.Date={{.DATE}}
 
 tasks:
+  vulncheck:
+    desc: "Scan dependencies for known vulnerabilities"
+    cmds:
+      - govulncheck ./...
+
   default:
     desc: List all tasks
     cmds:
