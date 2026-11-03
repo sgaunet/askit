@@ -26,11 +26,11 @@ type Requester interface {
 //
 //nolint:containedctx // ctx is request-scoped: each stream spawns its own ctx and the Model owns that lifecycle.
 type Model struct {
-	Session     *Session
-	Cfg         *config.Config
-	Req         Requester
-	Logger      *slog.Logger
-	NoColor     bool
+	Session *Session
+	Cfg     *config.Config
+	Req     Requester
+	Logger  *slog.Logger
+	NoColor bool
 
 	input      textarea.Model
 	transcript viewport.Model

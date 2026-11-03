@@ -9,9 +9,9 @@ import (
 // PlainRenderer streams text to an [io.Writer] and guarantees a trailing
 // newline at Finalize time (FR-041).
 type PlainRenderer struct {
-	Out    io.Writer
-	sawNL  bool
-	wrote  bool
+	Out   io.Writer
+	sawNL bool
+	wrote bool
 }
 
 // Stream writes delta directly. Tracks whether the last emitted byte was a

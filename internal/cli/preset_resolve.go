@@ -12,15 +12,15 @@ import (
 // are concrete (no pointers) so the downstream request builder doesn't
 // need to re-check layered nils.
 type ResolvedPreset struct {
-	Name         string
-	System       string
-	Temperature  float64
-	TopP         float64
-	MaxTokens    int
-	Seed         *int
-	Stream       bool
-	Output       config.OutputFormat
-	Model        string
+	Name        string
+	System      string
+	Temperature float64
+	TopP        float64
+	MaxTokens   int
+	Seed        *int
+	Stream      bool
+	Output      config.OutputFormat
+	Model       string
 }
 
 // PresetFlags is the subset of explicit CLI flags relevant to preset

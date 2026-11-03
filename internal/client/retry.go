@@ -63,6 +63,7 @@ func DefaultRetryOptions() RetryOptions {
 //
 // If ctx is cancelled or its deadline is reached during a backoff, the
 // most recent error is returned wrapped in a [TimeoutError].
+//
 //nolint:ireturn // T is constrained to any by the generic type parameter; the concrete type is determined at call site.
 func DoWithRetry[T any](ctx context.Context, opts RetryOptions, fn func(ctx context.Context) (T, error)) (T, error) {
 	var zero T
@@ -127,8 +128,7 @@ func retryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*APIError](err); ok {
 		switch {
 		case apiErr.Status == http.StatusTooManyRequests:
 			return true
@@ -137,8 +137,7 @@ func retryable(err error) bool {
 		}
 		return false
 	}
-	var netErr *NetworkError
-	if errors.As(err, &netErr) {
+	if _, ok := errors.AsType[*NetworkError](err); ok {
 		return true
 	}
 	if errors.Is(err, io.ErrUnexpectedEOF) {

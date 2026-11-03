@@ -34,8 +34,8 @@ func TestValidate_AggregatesAllErrors(t *testing.T) {
 func TestValidate_Each(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		mutate    func(*config.Config)
+		name       string
+		mutate     func(*config.Config)
 		wantSubstr string
 	}{
 		{"empty endpoint", func(c *config.Config) { c.Endpoint = "" }, "endpoint: required"},

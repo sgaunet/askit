@@ -58,8 +58,8 @@ func runConfig(g *Globals, showPath, showExplain bool, out io.Writer) error {
 }
 
 const (
-	yamlIndent    = 2 // standard YAML indentation for enc.SetIndent
-	tabwriterPad  = 2 // minimum cell padding in the explain table
+	yamlIndent   = 2 // standard YAML indentation for enc.SetIndent
+	tabwriterPad = 2 // minimum cell padding in the explain table
 )
 
 func emitYAML(out io.Writer, cfg *config.Config) error {

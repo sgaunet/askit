@@ -10,12 +10,12 @@ import (
 func TestReadPrompt(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		args      []string
-		stdin     string
-		stdinTTY  bool
-		want      string
-		wantErr   bool
+		name     string
+		args     []string
+		stdin    string
+		stdinTTY bool
+		want     string
+		wantErr  bool
 	}{
 		{"positional only, TTY stdin", []string{"hello"}, "", true, "hello", false},
 		{"stdin only, no positional", nil, "from stdin\n", false, "from stdin\n", false},

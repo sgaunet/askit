@@ -13,12 +13,12 @@ import (
 // so we can tell "field was absent from YAML" from "field was set to zero"
 // during a [Merge].
 type PartialConfig struct {
-	Endpoint       *string             `yaml:"endpoint"`
-	APIKey         *string             `yaml:"api_key"`
-	Model          *string             `yaml:"model"`
-	Defaults       *PartialDefaults    `yaml:"defaults"`
-	FileReferences *PartialFileRefs    `yaml:"file_references"`
-	Presets        map[string]Preset   `yaml:"presets"`
+	Endpoint       *string           `yaml:"endpoint"`
+	APIKey         *string           `yaml:"api_key"`
+	Model          *string           `yaml:"model"`
+	Defaults       *PartialDefaults  `yaml:"defaults"`
+	FileReferences *PartialFileRefs  `yaml:"file_references"`
+	Presets        map[string]Preset `yaml:"presets"`
 }
 
 // PartialDefaults is [Defaults] with absence-aware pointer fields.
@@ -35,12 +35,12 @@ type PartialDefaults struct {
 
 // PartialFileRefs is [FileRefsPolicy] with absence-aware pointer fields.
 type PartialFileRefs struct {
-	ImageExtensions []string            `yaml:"image_extensions"`
-	TextExtensions  []string            `yaml:"text_extensions"`
-	MaxImageSizeMB  *int                `yaml:"max_image_size_mb"`
-	MaxTextSizeKB   *int                `yaml:"max_text_size_kb"`
-	UnknownStrategy *UnknownKind        `yaml:"unknown_strategy"`
-	ResizeImages    *PartialResize      `yaml:"resize_images"`
+	ImageExtensions []string       `yaml:"image_extensions"`
+	TextExtensions  []string       `yaml:"text_extensions"`
+	MaxImageSizeMB  *int           `yaml:"max_image_size_mb"`
+	MaxTextSizeKB   *int           `yaml:"max_text_size_kb"`
+	UnknownStrategy *UnknownKind   `yaml:"unknown_strategy"`
+	ResizeImages    *PartialResize `yaml:"resize_images"`
 }
 
 // PartialResize is [ResizePolicy] with absence-aware pointer fields.

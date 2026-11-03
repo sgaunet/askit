@@ -7,10 +7,10 @@ import (
 	"github.com/sgaunet/askit/internal/config"
 )
 
-func strPtr(s string) *string            { return &s }
-func fPtr(f float64) *float64            { return &f }
-func iPtr(i int) *int                    { return &i }
-func bPtr(b bool) *bool                  { return &b }
+func strPtr(s string) *string                          { return &s }
+func fPtr(f float64) *float64                          { return &f }
+func iPtr(i int) *int                                  { return &i }
+func bPtr(b bool) *bool                                { return &b }
 func ofPtr(o config.OutputFormat) *config.OutputFormat { return &o }
 func dPtr(d time.Duration) *config.Duration {
 	x := config.Duration(d)

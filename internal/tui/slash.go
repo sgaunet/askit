@@ -11,14 +11,14 @@ import (
 
 // Sentinel errors for slash command validation.
 var (
-	errEmptySlashCmd     = errors.New("empty slash command")
-	errSystemNoArg       = errors.New("/system requires the new system prompt")
-	errPresetNoArg       = errors.New("/preset NAME — use /preset <name>")
-	errPresetUnknown     = errors.New("unknown preset")
-	errModelNoArg        = errors.New("/model NAME")
-	errSaveNoArg         = errors.New("/save FILE (extension: .json, .md, .txt)")
-	errSaveLastNoArg     = errors.New("/save-last FILE (extension: .json, .md, .txt)")
-	errUnknownSlashCmd   = errors.New("unknown command (try /help)")
+	errEmptySlashCmd   = errors.New("empty slash command")
+	errSystemNoArg     = errors.New("/system requires the new system prompt")
+	errPresetNoArg     = errors.New("/preset NAME — use /preset <name>")
+	errPresetUnknown   = errors.New("unknown preset")
+	errModelNoArg      = errors.New("/model NAME")
+	errSaveNoArg       = errors.New("/save FILE (extension: .json, .md, .txt)")
+	errSaveLastNoArg   = errors.New("/save-last FILE (extension: .json, .md, .txt)")
+	errUnknownSlashCmd = errors.New("unknown command (try /help)")
 )
 
 // SlashResult is produced by [DispatchSlash] so the bubbletea model can
@@ -51,6 +51,7 @@ func IsSlash(input string) bool {
 //
 // Unrecognized commands produce a SlashResult{Handled: true, Err: ...} so
 // the TUI can render the error inline without re-routing to the model.
+//
 //nolint:cyclop // One case per slash command; the switch is the canonical dispatcher and cannot be split further.
 func DispatchSlash(input string, sess *Session, presets map[string]config.Preset) SlashResult {
 	parts := strings.Fields(strings.TrimLeft(input, " \t"))

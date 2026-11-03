@@ -5,9 +5,9 @@ package config
 // fields participate in the merge.
 type Overrides struct {
 	// Global
-	Endpoint    *string
-	APIKey      *string
-	Model       *string
+	Endpoint *string
+	APIKey   *string
+	Model    *string
 	// Query-level flags overriding defaults
 	Temperature *float64
 	TopP        *float64
