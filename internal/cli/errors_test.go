@@ -61,7 +61,10 @@ func TestFormatError_CanonicalRegex(t *testing.T) {
 	}
 }
 
-type hintedErr struct{ err string; hint string }
+type hintedErr struct {
+	err  string
+	hint string
+}
 
 func (h *hintedErr) Error() string { return h.err }
 func (h *hintedErr) Hint() string  { return h.hint }
@@ -78,10 +81,13 @@ func TestFormatError_VerboseEmitsHint(t *testing.T) {
 	}
 }
 
-type apiBodyErr struct{ err string; body string }
+type apiBodyErr struct {
+	err  string
+	body string
+}
 
-func (a *apiBodyErr) Error() string            { return a.err }
-func (a *apiBodyErr) APIResponseBody() string  { return a.body }
+func (a *apiBodyErr) Error() string           { return a.err }
+func (a *apiBodyErr) APIResponseBody() string { return a.body }
 
 func TestFormatError_VVEmitsAPIBody(t *testing.T) {
 	t.Parallel()

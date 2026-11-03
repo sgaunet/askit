@@ -66,8 +66,7 @@ func CodeOf(err error) ExitCode {
 	if err == nil {
 		return ExitOK
 	}
-	var c *CategorizedError
-	if errors.As(err, &c) {
+	if c, ok := errors.AsType[*CategorizedError](err); ok {
 		return c.Code
 	}
 	return ExitGeneric
@@ -79,8 +78,7 @@ func CategoryOf(err error) Category {
 	if err == nil {
 		return CatGeneric
 	}
-	var c *CategorizedError
-	if errors.As(err, &c) {
+	if c, ok := errors.AsType[*CategorizedError](err); ok {
 		return c.Cat
 	}
 	return CatGeneric
@@ -103,8 +101,8 @@ type messageError struct {
 	sentinel error
 }
 
-func (e *messageError) Error() string  { return e.msg }
-func (e *messageError) Unwrap() error  { return e.sentinel }
+func (e *messageError) Error() string { return e.msg }
+func (e *messageError) Unwrap() error { return e.sentinel }
 
 func newMsg(format string, args []any, sentinel error) error {
 	return &messageError{msg: fmt.Sprintf(format, args...), sentinel: sentinel}
@@ -150,8 +148,7 @@ func WrapCategorized(cat Category, code ExitCode, err error) error {
 	if err == nil {
 		return nil
 	}
-	var existing *CategorizedError
-	if errors.As(err, &existing) {
+	if _, ok := errors.AsType[*CategorizedError](err); ok {
 		return err
 	}
 	return &CategorizedError{Cat: cat, Code: code, Err: err}

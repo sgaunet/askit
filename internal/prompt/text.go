@@ -35,7 +35,7 @@ func LoadTextRef(path string, maxKB int) (string, int64, error) {
 			Path:     path,
 			Got:      info.Size(),
 			Limit:    int64(maxKB) * bytesPerKB,
-			Kind:     "text",
+			Kind:     kindTextLabel,
 			LimitKey: "max_text_size_kb",
 		}
 	}

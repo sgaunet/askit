@@ -27,10 +27,10 @@ type LoadOptions struct {
 
 // Result is the product of a successful Load.
 type Result struct {
-	Config          *Config
-	Provenance      Provenance
-	ResolvedPath    string // empty if no file contributed
-	LoadedFromPath  bool
+	Config         *Config
+	Provenance     Provenance
+	ResolvedPath   string // empty if no file contributed
+	LoadedFromPath bool
 }
 
 // DefaultConfigPath returns the platform default config file location.

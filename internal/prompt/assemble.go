@@ -20,10 +20,10 @@ var (
 
 // AssembleOptions controls [Assemble]'s behavior.
 type AssembleOptions struct {
-	Policy        config.FileRefsPolicy
-	SystemPrompt  string
-	ExtraFiles    []string    // paths from repeated --file flags
-	Logger        *slog.Logger // optional; nil disables diagnostic logging
+	Policy       config.FileRefsPolicy
+	SystemPrompt string
+	ExtraFiles   []string     // paths from repeated --file flags
+	Logger       *slog.Logger // optional; nil disables diagnostic logging
 }
 
 // Assemble parses the prompt, resolves every `@path` token, and returns the

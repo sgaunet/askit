@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -100,9 +101,9 @@ func (s *Session) MarkLastCancelled() {
 // LastAssistantText returns the text of the most recent assistant message,
 // or the empty string if none.
 func (s *Session) LastAssistantText() string {
-	for i := len(s.History) - 1; i >= 0; i-- {
-		if s.History[i].Role == RoleAssistant {
-			return s.History[i].Text
+	for _, e := range slices.Backward(s.History) {
+		if e.Role == RoleAssistant {
+			return e.Text
 		}
 	}
 	return ""

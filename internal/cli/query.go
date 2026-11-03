@@ -425,8 +425,7 @@ func categorizeConfigError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var vErr *config.ValidationError
-	if errors.As(err, &vErr) {
+	if _, ok := errors.AsType[*config.ValidationError](err); ok {
 		return NewConfigErr("%s", err.Error())
 	}
 	if errors.Is(err, config.ErrConfigMissing) {
@@ -447,16 +446,13 @@ func categorizeTransportError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var apiErr *client.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*client.APIError](err); ok {
 		return &CategorizedError{Cat: CatAPI, Code: ExitAPI, Err: apiErr}
 	}
-	var timeoutErr *client.TimeoutError
-	if errors.As(err, &timeoutErr) {
+	if _, ok := errors.AsType[*client.TimeoutError](err); ok {
 		return NewTimeoutErr("%s", err.Error())
 	}
-	var netErr *client.NetworkError
-	if errors.As(err, &netErr) {
+	if _, ok := errors.AsType[*client.NetworkError](err); ok {
 		return NewNetworkErr("%s", err.Error())
 	}
 	return NewNetworkErr("%s", err.Error())

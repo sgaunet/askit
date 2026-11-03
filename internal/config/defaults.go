@@ -4,15 +4,15 @@ import "time"
 
 // Default values for built-in configuration — named to satisfy the mnd linter.
 const (
-	defaultTemperature        = 0.2
-	defaultMaxTokens          = 4096
-	defaultTimeoutSeconds     = 60
-	defaultStreamIdleMinutes  = 2
-	defaultRetries            = 2
-	defaultMaxImageSizeMB     = 20
-	defaultMaxTextSizeKB      = 500
-	defaultMaxLongEdgePx      = 2048
-	defaultJPEGQuality        = 85
+	defaultTemperature       = 0.2
+	defaultMaxTokens         = 4096
+	defaultTimeoutSeconds    = 60
+	defaultStreamIdleMinutes = 2
+	defaultRetries           = 2
+	defaultMaxImageSizeMB    = 20
+	defaultMaxTextSizeKB     = 500
+	defaultMaxLongEdgePx     = 2048
+	defaultJPEGQuality       = 85
 )
 
 // Builtins returns the baseline configuration used when no value comes from a

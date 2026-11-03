@@ -18,7 +18,7 @@ var (
 // chunks and `@path` references it contains. Handles:
 //
 //   - `@/abs/path` / `@./rel` / `@~/home`
-//   - backtick-quoted paths with spaces: `` @`my scan.png` ``
+//   - backtick-quoted paths with spaces: “ @`my scan.png` “
 //   - escaped literal `@`: `\@` → produces an `@` in a TokenText
 //   - optional `:kind` suffix (`:text` | `:image`) overriding classification
 //
@@ -26,8 +26,8 @@ var (
 // input silently.
 func Tokenize(s string) ([]Token, error) {
 	var (
-		tokens  []Token
-		cur     strings.Builder
+		tokens    []Token
+		cur       strings.Builder
 		flushText = func() {
 			if cur.Len() > 0 {
 				tokens = append(tokens, Token{Kind: TokenText, Text: cur.String()})
@@ -140,15 +140,15 @@ func parseKindSuffix(raw string, isQuoted bool) (Kind, string) {
 	if isQuoted {
 		return KindUnknown, raw
 	}
-	idx := strings.LastIndex(raw, ":")
-	if idx < 0 {
+	path, suffix, found := strings.CutLast(raw, ":")
+	if !found {
 		return KindUnknown, raw
 	}
-	switch raw[idx+1:] {
-	case "text":
-		return KindText, raw[:idx]
-	case "image":
-		return KindImage, raw[:idx]
+	switch suffix {
+	case kindTextLabel:
+		return KindText, path
+	case kindImageLabel:
+		return KindImage, path
 	}
 	return KindUnknown, raw
 }

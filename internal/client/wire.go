@@ -10,14 +10,14 @@ import (
 // the [Client] is the only consumer.
 
 type chatReq struct {
-	Model       string       `json:"model"`
-	Messages    []wireMsg    `json:"messages"`
-	Temperature *float64     `json:"temperature,omitempty"`
-	TopP        *float64     `json:"top_p,omitempty"`
-	MaxTokens   *int         `json:"max_tokens,omitempty"`
-	Seed        *int         `json:"seed,omitempty"`
-	Stream      bool         `json:"stream,omitempty"`
-	StreamOpts  *streamOpts  `json:"stream_options,omitempty"`
+	Model       string      `json:"model"`
+	Messages    []wireMsg   `json:"messages"`
+	Temperature *float64    `json:"temperature,omitempty"`
+	TopP        *float64    `json:"top_p,omitempty"`
+	MaxTokens   *int        `json:"max_tokens,omitempty"`
+	Seed        *int        `json:"seed,omitempty"`
+	Stream      bool        `json:"stream,omitempty"`
+	StreamOpts  *streamOpts `json:"stream_options,omitempty"`
 }
 
 type streamOpts struct {
@@ -25,8 +25,8 @@ type streamOpts struct {
 }
 
 type wireMsg struct {
-	Role    string      `json:"role"`
-	Content jsonRaw     `json:"content"`
+	Role    string  `json:"role"`
+	Content jsonRaw `json:"content"`
 }
 
 // jsonRaw is either a plain string (for system messages) or a structured

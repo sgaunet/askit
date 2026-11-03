@@ -19,7 +19,7 @@ func buildReq() *client.Request {
 		Prompt: &prompt.Prompt{
 			System: "you are helpful",
 			Messages: []prompt.Message{{
-				Role: "user",
+				Role:    "user",
 				Content: []prompt.ContentPart{{Type: prompt.PartTypeText, Text: "hi"}},
 			}},
 		},
