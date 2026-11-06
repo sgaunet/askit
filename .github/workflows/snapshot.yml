@@ -8,10 +8,13 @@ name: snapshot
 
 on:
   push:
-    # Optionally limit to specific branches
-    # branches: [main, develop]
+    # A tags/tags-ignore filter alone stops GitHub from triggering on branch
+    # pushes, so branches must be listed explicitly. Narrow this list to
+    # limit which branches run the snapshot build.
+    branches:
+      - '**'
 
-    # Optionally skip on tag pushes (since release.yml handles those)
+    # Skip tag pushes (release.yml handles those)
     tags-ignore:
       - '**'
 
